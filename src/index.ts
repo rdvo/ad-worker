@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { contextStorage, getContext } from 'hono/context-storage';
 import { getBotUsername } from './utils';
-import { generateArticle, handleMessage } from './arti';
+import { handleMessage } from './arti';
+import { CoreMessage } from "ai";
 
 type Env = {
   Bindings: {
@@ -52,18 +53,30 @@ async function sendMessage(chat_id: number, text: string) {
   }
 }
 
-async function saveChatHistory(chat_id: number, message: any) {
+async function saveChatHistory(chat_id: number, history: CoreMessage[]) {
   const context = getContext<Env>();
   const key = `chat_history_${chat_id}`;
-  const existingHistory = await context.env.kv.get(key, 'json') || [];
-  existingHistory.push(message);
-  await context.env.kv.put(key, JSON.stringify(existingHistory));
+  
+  await context.env.kv.put(key, JSON.stringify(history));
 }
 
-async function getChatHistory(chat_id: number) {
+async function getChatHistory(chat_id: number): Promise<CoreMessage[]> {
   const context = getContext<Env>();
   const key = `chat_history_${chat_id}`;
-  return await context.env.kv.get(key, 'json') || [];
+  const history: CoreMessage[] = await context.env.kv.get(key, 'json') || [];
+  return history;
+}
+
+async function saveChatMessage(chat_id: number, message: any) {
+  const context = getContext<Env>();
+  const key = `chat_history_${chat_id}`;
+  const existingHistory: CoreMessage[] = await context.env.kv.get(key, 'json') || [];
+  const newMessage: CoreMessage = {
+    role: 'user',
+    content: `@${message.from.username}#${message.from.id} - ${message.text}`,
+  };
+  existingHistory.push(newMessage);
+  await context.env.kv.put(key, JSON.stringify(existingHistory));
 }
 
 app.post('/webhook', async (c) => {
@@ -78,8 +91,10 @@ app.post('/webhook', async (c) => {
       
       console.log(`Received message in chat type: ${chat_type}`);
 
-      // Save the message to chat history
-      await saveChatHistory(chat_id, update.message);
+      // Save the message regardless of whether the bot is mentioned
+      await saveChatMessage(chat_id, update.message);
+
+      const chatHistory = await getChatHistory(chat_id);
 
       if (chat_type === 'group' || chat_type === 'supergroup') {
         console.log('Message received in a group chat');
@@ -106,11 +121,11 @@ app.post('/webhook', async (c) => {
           if (received_text.includes(botMention)) {
             console.log('Bot was mentioned in group');
             const cleanedText = received_text.replace(botMention, '').trim();
-            const chatHistory = await getChatHistory(chat_id);
-            const response = await handleMessage(cleanedText, chatHistory, chat_id);
+            const { text: response, updatedHistory } = await handleMessage(cleanedText, chatHistory, chat_id);
+            await saveChatHistory(chat_id, updatedHistory as CoreMessage[]);
             await sendMessage(chat_id, response);
           } else {
-            console.log('Bot was not mentioned, but received group message');
+            console.log('Bot was not mentioned, but message saved to history');
           }
         }
       } else if (chat_type === 'private') {
@@ -118,8 +133,8 @@ app.post('/webhook', async (c) => {
         const received_text = update.message.text;
         if (received_text) {
           console.log(`Received text in private chat: ${received_text}`);
-          const chatHistory = await getChatHistory(chat_id);
-          const response = await handleMessage(received_text, chatHistory, chat_id);
+          const { text: response, updatedHistory } = await handleMessage(received_text, chatHistory, chat_id);
+          await saveChatHistory(chat_id, updatedHistory as CoreMessage[]);
           await sendMessage(chat_id, response);
         }
       }
