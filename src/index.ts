@@ -53,6 +53,7 @@ async function sendMessage(chat_id: number, text: string) {
 
 app.post('/webhook', async (c) => {
   try {
+	console.log('Received update:');
     const update = await c.req.json();
     console.log('Received update:', update);
 
