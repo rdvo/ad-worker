@@ -53,39 +53,58 @@ async function sendMessage(chat_id: number, text: string) {
 
 app.post('/webhook', async (c) => {
   try {
-	console.log('Received update:');
+    console.log('Webhook hit. Received update:');
     const update = await c.req.json();
-    console.log('Received update:', update);
+    console.log(JSON.stringify(update, null, 2));
 
     if (update.message) {
       const chat_id = update.message.chat.id;
+      const chat_type = update.message.chat.type;
+      
+      console.log(`Received message in chat type: ${chat_type}`);
 
-      if (update.message.new_chat_member || update.message.new_chat_members) {
-        const newMember = update.message.new_chat_member || update.message.new_chat_members[0];
-        console.log('New member joined:', newMember);
+      if (chat_type === 'group' || chat_type === 'supergroup') {
+        console.log('Message received in a group chat');
+        
+        // Handle new member joins
+        if (update.message.new_chat_member || update.message.new_chat_members) {
+          const newMember = update.message.new_chat_member || update.message.new_chat_members[0];
+          console.log('New member joined:', newMember);
 
-        if (newMember.id === parseInt(BOT_TOKEN.split(':')[0])) {
-          console.log('The bot has joined the group.');
+          if (newMember.id === parseInt(BOT_TOKEN.split(':')[0])) {
+            console.log('The bot has joined the group.');
+          }
+
+          return c.text('OK');
         }
 
-        return c.text('OK');
-      }
+        // Handle text messages
+        const received_text = update.message.text;
+        if (received_text) {
+          console.log(`Received text in group: ${received_text}`);
+          const botUsername = await getBotUsername(BOT_TOKEN);
+          const botMention = `@${botUsername}`;
 
-      const received_text = update.message.text;
-      if (received_text) {
-        const botUsername = await getBotUsername(BOT_TOKEN);
-        const botMention = `@${botUsername}`;
-
-        if (received_text.includes(botMention)) {
-          console.log('Bot was mentioned');
-          const cleanedText = received_text.replace(botMention, '').trim();
-          // Remove article generation
-          // await sendMessage(chat_id, `Received: ${cleanedText}`);
-        } else {
-          console.log('Bot was not mentioned, ignoring message');
+          if (received_text.includes(botMention)) {
+            console.log('Bot was mentioned in group');
+            const cleanedText = received_text.replace(botMention, '').trim();
+            await sendMessage(chat_id, `Received in group: ${cleanedText}`);
+          } else {
+            console.log('Bot was not mentioned, but received group message');
+          }
+        }
+      } else if (chat_type === 'private') {
+        console.log('Message received in private chat');
+        const received_text = update.message.text;
+        if (received_text) {
+          console.log(`Received text in private chat: ${received_text}`);
+          await sendMessage(chat_id, `Received: ${received_text}`);
         }
       }
+    } else {
+      console.log('Received update without message object:', update);
     }
+
     return c.text('OK');
   } catch (error) {
     console.error('Error handling update:', error);
