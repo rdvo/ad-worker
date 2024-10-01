@@ -1,22 +1,29 @@
-// worker.ts
-
 import { Hono } from 'hono';
-import type { Context } from 'hono';
+import { contextStorage, getContext } from 'hono/context-storage';
+import { generateArticle } from './arti';
+import { getBotUsername } from './utils';
 
-// Define types for the variables stored in the context
-type MyVariables = {
-  BOT_TOKEN: string;
-  TELEGRAM_API: string;
+type Env = {
+  Bindings: {
+    kv: KVNamespace;
+  };
+  Variables: {
+    BOT_TOKEN: string;
+    TELEGRAM_API: string;
+  };
 };
 
-// Create a new Hono app instance with typed variables
-const app = new Hono<{ Variables: MyVariables }>();
+const app = new Hono<Env>();
 
-// Store the BOT_TOKEN and API_KEY securely
+app.use(contextStorage());
+
 const BOT_TOKEN = '7708406011:AAFDTeflES4ShKVd5zKoL_Qm1C5vqQAdkQM';
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
-// Middleware to set up environment variables
+const fromKV = async (key: string) => {
+  return await getContext<Env>().env.kv.get(key);
+};
+
 app.use('*', async (c, next) => {
   if (!BOT_TOKEN) {
     console.error('BOT_TOKEN is not set.');
@@ -27,20 +34,15 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-// Function to send messages via Telegram API
-async function sendMessage(chat_id: number, text: string, c: Context<{ Variables: MyVariables }>) {
-  const TELEGRAM_API = c.get('TELEGRAM_API');
+async function sendMessage(chat_id: number, text: string) {
+  const context = getContext<Env>();
+  const TELEGRAM_API = context.var.TELEGRAM_API;
   const url = `${TELEGRAM_API}/sendMessage`;
-  const payload = {
-    chat_id,
-    text,
-  };
+  const payload = { chat_id, text };
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 
@@ -50,7 +52,6 @@ async function sendMessage(chat_id: number, text: string, c: Context<{ Variables
   }
 }
 
-// Endpoint to handle incoming Telegram updates
 app.post('/webhook', async (c) => {
   try {
     const update = await c.req.json();
@@ -59,12 +60,10 @@ app.post('/webhook', async (c) => {
     if (update.message) {
       const chat_id = update.message.chat.id;
 
-      // Check if the message is a new chat member joining
       if (update.message.new_chat_member || update.message.new_chat_members) {
         const newMember = update.message.new_chat_member || update.message.new_chat_members[0];
         console.log('New member joined:', newMember);
 
-        // Check if the new member is the bot itself
         if (newMember.id === parseInt(BOT_TOKEN.split(':')[0])) {
           console.log('The bot has joined the group.');
         }
@@ -73,12 +72,19 @@ app.post('/webhook', async (c) => {
       }
 
       const received_text = update.message.text;
+      if (received_text) {
+        const botUsername = await getBotUsername(BOT_TOKEN);
+        const botMention = `@${botUsername}`;
 
-      // Prepare a response based on the received message
-      // const response_text = `You said: ${received_text}`;
-
-      // Send the response back to the user
-      // await sendMessage(chat_id, response_text, c);
+        if (received_text.includes(botMention)) {
+          console.log('Bot was mentioned');
+          const cleanedText = received_text.replace(botMention, '').trim();
+          const article = await generateArticle(cleanedText);
+          await sendMessage(chat_id, article);
+        } else {
+          console.log('Bot was not mentioned, ignoring message');
+        }
+      }
     }
     return c.text('OK');
   } catch (error) {
@@ -87,8 +93,6 @@ app.post('/webhook', async (c) => {
   }
 });
 
-// Default route for testing
 app.get('/', (c) => c.text('Hello, Telegram bot is running!'));
 
-// Export the app as default
 export default app;
