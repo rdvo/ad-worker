@@ -1,6 +1,13 @@
 import { generateText, CoreMessage } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { fromKV } from './utils';
+import { getContext } from 'hono/context-storage';
+
+type Env = {
+  Bindings: {
+    kv: KVNamespace;
+  };
+};
 
 export async function handleMessage(message: string, chatHistory: CoreMessage[], chat_id: number) {
   const systemPrompt = await fromKV('system_prompt') || 'You are a helpful assistant in a Telegram chat. Respond to user queries and engage in conversation.';
@@ -13,13 +20,13 @@ export async function handleMessage(message: string, chatHistory: CoreMessage[],
       { role: 'user', content: message }
     ],
     maxTokens: 8000,
-    onFinish: async ({ text, toolCalls, toolResults, usage, finishReason }) => {
-      console.log('Message generated:', { text, usage, finishReason });
-      // Save the new messages to the chat history
-      await saveChatHistory(chat_id, { role: 'user', content: message });
-      await saveChatHistory(chat_id, { role: 'assistant', content: text });
-    },
   });
+
+  // Save the new messages to the chat history
+  await saveChatHistory(chat_id, { role: 'user', content: message });
+  await saveChatHistory(chat_id, { role: 'assistant', content: text });
+
+  console.log('Message generated:', { text });
 
   return text;
 }
