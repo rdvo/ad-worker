@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { contextStorage, getContext } from 'hono/context-storage';
-import { generateArticle } from './arti';
 import { getBotUsername } from './utils';
 
 type Env = {
@@ -79,8 +78,8 @@ app.post('/webhook', async (c) => {
         if (received_text.includes(botMention)) {
           console.log('Bot was mentioned');
           const cleanedText = received_text.replace(botMention, '').trim();
-          const article = await generateArticle(cleanedText);
-          await sendMessage(chat_id, article);
+          // Remove article generation
+          await sendMessage(chat_id, `Received: ${cleanedText}`);
         } else {
           console.log('Bot was not mentioned, ignoring message');
         }
