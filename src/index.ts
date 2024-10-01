@@ -79,7 +79,7 @@ app.post('/webhook', async (c) => {
           console.log('Bot was mentioned');
           const cleanedText = received_text.replace(botMention, '').trim();
           // Remove article generation
-          await sendMessage(chat_id, `Received: ${cleanedText}`);
+          // await sendMessage(chat_id, `Received: ${cleanedText}`);
         } else {
           console.log('Bot was not mentioned, ignoring message');
         }
