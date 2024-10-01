@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { contextStorage, getContext } from 'hono/context-storage';
 import { getBotUsername } from './utils';
+import { generateArticle, handleMessage } from './arti';
 
 type Env = {
   Bindings: {
@@ -51,6 +52,20 @@ async function sendMessage(chat_id: number, text: string) {
   }
 }
 
+async function saveChatHistory(chat_id: number, message: any) {
+  const context = getContext<Env>();
+  const key = `chat_history_${chat_id}`;
+  const existingHistory = await context.env.kv.get(key, 'json') || [];
+  existingHistory.push(message);
+  await context.env.kv.put(key, JSON.stringify(existingHistory));
+}
+
+async function getChatHistory(chat_id: number) {
+  const context = getContext<Env>();
+  const key = `chat_history_${chat_id}`;
+  return await context.env.kv.get(key, 'json') || [];
+}
+
 app.post('/webhook', async (c) => {
   try {
     console.log('Webhook hit. Received update:');
@@ -62,6 +77,9 @@ app.post('/webhook', async (c) => {
       const chat_type = update.message.chat.type;
       
       console.log(`Received message in chat type: ${chat_type}`);
+
+      // Save the message to chat history
+      await saveChatHistory(chat_id, update.message);
 
       if (chat_type === 'group' || chat_type === 'supergroup') {
         console.log('Message received in a group chat');
@@ -88,7 +106,9 @@ app.post('/webhook', async (c) => {
           if (received_text.includes(botMention)) {
             console.log('Bot was mentioned in group');
             const cleanedText = received_text.replace(botMention, '').trim();
-            await sendMessage(chat_id, `Received in group: ${cleanedText}`);
+            const chatHistory = await getChatHistory(chat_id);
+            const response = await handleMessage(cleanedText, chatHistory, chat_id);
+            await sendMessage(chat_id, response);
           } else {
             console.log('Bot was not mentioned, but received group message');
           }
@@ -98,7 +118,9 @@ app.post('/webhook', async (c) => {
         const received_text = update.message.text;
         if (received_text) {
           console.log(`Received text in private chat: ${received_text}`);
-          await sendMessage(chat_id, `Received: ${received_text}`);
+          const chatHistory = await getChatHistory(chat_id);
+          const response = await handleMessage(received_text, chatHistory, chat_id);
+          await sendMessage(chat_id, response);
         }
       }
     } else {
