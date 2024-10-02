@@ -3,11 +3,16 @@ import { getContext } from 'hono/context-storage';
 type Env = {
   Bindings: {
     kv: KVNamespace;
+    OPENAI_API_KEY: string;
   };
 };
 
 export const fromKV = async (key: string) => {
   return await getContext<Env>().env.kv.get(key);
+};
+
+export const fromEnv = (key: string) => {
+  return getContext<Env>().env[key as keyof Env['Bindings']];
 };
 
 interface TelegramResponse {
@@ -26,3 +31,7 @@ export async function getBotUsername(botToken: string): Promise<string> {
   }
   throw new Error('Failed to get bot username');
 }
+
+export const replaceMacros = (template: string, data: Record<string, string>): string => {
+  return template.replace(/{{(.*?)}}/g, (_, key) => data[key.trim()] || '');
+};

@@ -4,12 +4,18 @@ import { getBotUsername } from './utils';
 import { handleMessage } from './arti';
 import { CoreMessage } from "ai";
 
+// Add this function at the top of the file, after the imports
+function formatUserInfo(first_name: string, username: string): string {
+  return `[${first_name}${username ? ` (@${username})` : ''}]`;
+}
+
 type Env = {
   Bindings: {
     kv: KVNamespace;
   };
   Variables: {
     BOT_TOKEN: string;
+    OPENAI_API_KEY: string;
     TELEGRAM_API: string;
   };
 };
@@ -53,6 +59,15 @@ async function sendMessage(chat_id: number, text: string) {
   }
 }
 
+async function getTelegramFileURL(file_id: string): Promise<string> {
+  const context = getContext<Env>();
+  const TELEGRAM_API = context.var.TELEGRAM_API;
+  const url = `${TELEGRAM_API}/getFile?file_id=${file_id}`;
+  const response = await fetch(url);
+  const data: { result: { file_path: string } } = await response.json();
+  return data.result.file_path;
+}
+
 async function saveChatHistory(chat_id: number, history: CoreMessage[]) {
   const context = getContext<Env>();
   const key = `chat_history_${chat_id}`;
@@ -67,13 +82,14 @@ async function getChatHistory(chat_id: number): Promise<CoreMessage[]> {
   return history;
 }
 
-async function saveChatMessage(chat_id: number, message: any) {
+async function saveChatMessage(chat_id: number, message: any, first_name: string, username: string) {
   const context = getContext<Env>();
   const key = `chat_history_${chat_id}`;
   const existingHistory: CoreMessage[] = await context.env.kv.get(key, 'json') || [];
+  const userInfo = formatUserInfo(first_name, username);
   const newMessage: CoreMessage = {
     role: 'user',
-    content: `@${message.from.username}#${message.from.id} - ${message.text}`,
+    content: `${userInfo} ${message.text}`,
   };
   existingHistory.push(newMessage);
   await context.env.kv.put(key, JSON.stringify(existingHistory));
@@ -88,11 +104,13 @@ app.post('/webhook', async (c) => {
     if (update.message) {
       const chat_id = update.message.chat.id;
       const chat_type = update.message.chat.type;
+      const first_name = update.message.from.first_name; // Extract first name
+      const username = update.message.from.username; // Extract username
       
       console.log(`Received message in chat type: ${chat_type}`);
 
-      // Save the message regardless of whether the bot is mentioned
-      await saveChatMessage(chat_id, update.message);
+      // Save the message with user info
+      await saveChatMessage(chat_id, update.message, first_name, username);
 
       const chatHistory = await getChatHistory(chat_id);
 
@@ -122,10 +140,10 @@ app.post('/webhook', async (c) => {
             console.log('Bot was mentioned in group');
             const cleanedText = received_text.replace(botMention, '').trim();
             const { text: response, updatedHistory } = await handleMessage(cleanedText, chatHistory, chat_id);
-            await saveChatHistory(chat_id, updatedHistory as CoreMessage[]);
+            await saveChatHistory(chat_id, updatedHistory);
             await sendMessage(chat_id, response);
           } else {
-            console.log('Bot was not mentioned, but message saved to history');
+            console.log('Bot was not mentioned, message already saved to history');
           }
         }
       } else if (chat_type === 'private') {
@@ -134,7 +152,7 @@ app.post('/webhook', async (c) => {
         if (received_text) {
           console.log(`Received text in private chat: ${received_text}`);
           const { text: response, updatedHistory } = await handleMessage(received_text, chatHistory, chat_id);
-          await saveChatHistory(chat_id, updatedHistory as CoreMessage[]);
+          await saveChatHistory(chat_id, updatedHistory);
           await sendMessage(chat_id, response);
         }
       }
