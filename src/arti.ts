@@ -23,7 +23,7 @@ export async function handleMessage(
 
   const currentTime = new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York' });
   const currentDate = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York' });
-  const currentLocation = 'New York, NY'; // This should be dynamically set based on actual location data
+  const currentLocation = 'Brooklyn, NY'; // This should be dynamically set based on actual location data
 
   const systemPrompt = replaceMacros(systemPromptTemplate, {
     TIME: currentTime,
@@ -55,6 +55,7 @@ export async function handleMessage(
     system: systemPrompt,
     messages: formattedMessages,
     maxTokens: 4096,
+    temperature: 0.9,
     tools: {
       googleNews: googleNewsTool,
     },
