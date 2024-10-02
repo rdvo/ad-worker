@@ -169,4 +169,6 @@ app.post('/webhook', async (c) => {
 
 app.get('/', (c) => c.text('Hello, Telegram bot is running!'));
 
+
+
 export default app;

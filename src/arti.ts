@@ -8,8 +8,8 @@ import {
 } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { fromKV, fromEnv, replaceMacros } from './utils';
-import { googleNewsTool } from '../tools/google'; // Import tools individually
-
+import { googleNewsTool } from '../tools/google';
+import { fluxImageGenerationTool } from '../tools/flux';
 import { z } from 'zod';
 
 const MAX_TOKENS = 128000;
@@ -55,9 +55,10 @@ export async function handleMessage(
     system: systemPrompt,
     messages: formattedMessages,
     maxTokens: 4096,
-    temperature: 0.9,
+    temperature: 0.85,
     tools: {
       googleNews: googleNewsTool,
+      fluxImageGeneration: fluxImageGenerationTool,
     },
     toolChoice: 'auto',
     maxSteps: 10,
